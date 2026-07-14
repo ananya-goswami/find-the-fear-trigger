@@ -9,6 +9,8 @@ const VOICEOVER_PATH = './assets/audio/voiceovers/';
 // new voiceover sfx key here as it gets wired.
 const NATURAL_RATE_SFX = new Set(['firstPageInstruction', 'complete']);
 
+const GAME_CATEGORY = 'fear-triggers';
+
 let supportedLanguages = {
   en: 'English',
   gu: '\u0a97\u0ac1\u0a9c\u0ab0\u0abe\u0aa4\u0ac0',
@@ -16,6 +18,82 @@ let supportedLanguages = {
   mr: '\u092e\u0930\u093e\u0920\u0940',
   te: '\u0c24\u0c46\u0c32\u0c41\u0c17\u0c41'
 };
+
+// --- Analytics bridge (Android WebView) ---
+function sendGameEvent(functionName, dataArgs) {
+  console.log(`%cANALYTICS: ${functionName}`, 'color: #386AF6; font-weight: bold;', dataArgs);
+  const message = {
+    functionName,
+    args: dataArgs
+  };
+  const jsonString = JSON.stringify(message);
+  if (window.AndroidBridge && window.AndroidBridge.postMessage) {
+    window.AndroidBridge.postMessage(jsonString);
+  }
+}
+
+function practiceActivityStarted(data) {
+  sendGameEvent('practiceActivityStarted', data);
+}
+
+function practiceActivityCompleted(data) {
+  sendGameEvent('practiceActivityCompleted', data);
+}
+
+function practiceQuestionAttempted(data) {
+  sendGameEvent('practiceQuestionAttempted', data);
+}
+
+function closeActivity() {
+  sendGameEvent('closeActivity', {});
+}
+
+// Language handed in by the host app (getEnvironment), falling back to the
+// bundled default. A saved in-game choice (localStorage) still wins.
+let initialLang = 'en';
+if (typeof locales !== 'undefined' && locales?.defaultLanguage) {
+  initialLang = locales.defaultLanguage;
+}
+if (typeof window.getEnvironment === 'function') {
+  try {
+    const env = window.getEnvironment();
+    if (env && env.app_language && Object.prototype.hasOwnProperty.call(supportedLanguages, env.app_language)) {
+      initialLang = env.app_language;
+    }
+  } catch (error) {
+    console.warn('Error calling getEnvironment(), falling back to default language.', error);
+  }
+}
+
+// Timestamp of when play actually started (loader tapped), a one-shot guard so
+// the completion event fires only once per play-through, and the learner's
+// FIRST-attempt trigger score (Try Again re-grades don't overwrite it).
+let gameStartTime = 0;
+let completionTracked = false;
+let firstTryTriggerCorrect = null;
+
+function startAnalyticsRun() {
+  gameStartTime = Date.now();
+  completionTracked = false;
+  firstTryTriggerCorrect = null;
+  practiceActivityStarted({
+    category: GAME_CATEGORY,
+    language: currentLanguage || initialLang
+  });
+}
+
+function trackGameCompletion() {
+  if (completionTracked) return;
+  completionTracked = true;
+  const elapsedSeconds = gameStartTime ? (Date.now() - gameStartTime) / 1000 : 0;
+  practiceActivityCompleted({
+    category: GAME_CATEGORY,
+    language: currentLanguage || initialLang,
+    timeSpent: Math.round(elapsedSeconds),
+    totalQuestion: TRIGGER_IDS.length,
+    correctQuestion: firstTryTriggerCorrect ?? (state.triggerScore?.correct || 0)
+  });
+}
 
 let localeContent = {};
 let shellCopy = { en: {} };
@@ -35,6 +113,64 @@ Object.values(sfx).forEach((audio) => {
   audio.preload = 'auto';
   audio.playsInline = true;
 });
+
+// --- Voiceover loudness boost -------------------------------------------------
+// An <audio> element caps at volume 1.0, but the voiceover recordings sit a bit
+// low, so we route ONLY the voice clips (not the SFX) through the Web Audio API
+// with a gain > 1 to lift them to a comfortable medium level. Everything degrades
+// gracefully: if Web Audio is unavailable or the context can't run yet, the clip
+// simply plays natively at 1.0 (never silent).
+// === VOICEOVER VOLUME knob === 1 = unchanged, higher = louder. Kept modest so
+// the voice doesn't clip/distort.
+const VOICE_GAIN = 1.5;
+let voiceAudioCtx = null;
+let voiceGainNode = null;
+const voiceRoutedEls = new WeakSet();
+
+function ensureVoiceGain() {
+  if (!voiceGainNode) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    try {
+      voiceAudioCtx = new Ctx();
+      voiceGainNode = voiceAudioCtx.createGain();
+      voiceGainNode.gain.value = VOICE_GAIN;
+      voiceGainNode.connect(voiceAudioCtx.destination);
+    } catch (e) {
+      voiceAudioCtx = null;
+      voiceGainNode = null;
+      return null;
+    }
+  }
+  return voiceGainNode;
+}
+
+// Resume the audio context (must happen after a user gesture — see the loader tap).
+function resumeVoiceCtx() {
+  ensureVoiceGain();
+  if (voiceAudioCtx && voiceAudioCtx.state === 'suspended') {
+    voiceAudioCtx.resume().catch(() => {});
+  }
+}
+
+// Route a voice <audio> element through the gain node (once per element). Only
+// routes once the context is actually RUNNING, so we never feed audio into a
+// suspended graph (which would be silent) — until then it plays natively at 1.0.
+function boostVoice(audio) {
+  if (!audio) return;
+  const gain = ensureVoiceGain();
+  if (!gain) return;
+  resumeVoiceCtx();
+  if (voiceAudioCtx.state !== 'running') return;
+  if (voiceRoutedEls.has(audio)) return;
+  try {
+    const source = voiceAudioCtx.createMediaElementSource(audio);
+    source.connect(gain);
+    voiceRoutedEls.add(audio);
+  } catch (e) {
+    // createMediaElementSource throws if the element is already routed — ignore.
+  }
+}
 
 let currentLanguage = 'en';
 let activeAudio = null;
@@ -93,6 +229,8 @@ const state = {
 
 const ui = {
   loader: document.getElementById('loader-overlay'),
+  loaderCard: document.querySelector('.loader-overlay-card'),
+  loaderText: document.getElementById('loader-overlay-text'),
   progressDots: document.getElementById('progressDots'),
   moduleLabel: document.querySelector('.question-label'),
   title: document.getElementById('activityTitle'),
@@ -309,6 +447,8 @@ function playSfx(kind) {
   sound.pause();
   sound.currentTime = 0;
   sound.playbackRate = NATURAL_RATE_SFX.has(kind) ? 1 : AUDIO_PLAYBACK_RATE;
+  // Boost only the voiceover (the intro instruction), not the UI SFX.
+  if (kind === 'firstPageInstruction') boostVoice(sound);
   return sound.play()
     .then(() => true)
     .catch(() => false);
@@ -325,6 +465,8 @@ function playSfxThrough(kind, onDone) {
   sound.pause();
   sound.currentTime = 0;
   sound.playbackRate = NATURAL_RATE_SFX.has(kind) ? 1 : AUDIO_PLAYBACK_RATE;
+  // Boost only the voiceover (the intro instruction), not the UI SFX.
+  if (kind === 'firstPageInstruction') boostVoice(sound);
   sound.onended = onDone;
   sound.onerror = onDone;
   sound.play().catch(onDone);
@@ -345,6 +487,38 @@ function clearStartupGateListeners() {
   startupGateRelease = null;
 }
 
+// Spinner-only phase: the loader shows but is NOT clickable — no "Tap to Play"
+// text — until the game's assets have finished loading.
+function setStartupGateLoading() {
+  if (!ui.loader) return;
+  clearStartupGateListeners();
+  ui.loader.classList.remove('hidden', 'is-ready');
+  ui.loader.classList.add('is-loading');
+  ui.loader.setAttribute('aria-busy', 'true');
+  if (ui.loaderCard) {
+    ui.loaderCard.removeAttribute('role');
+    ui.loaderCard.removeAttribute('tabindex');
+    ui.loaderCard.removeAttribute('aria-label');
+  }
+  if (ui.loaderText) ui.loaderText.hidden = true;
+  document.body.classList.add('startup-gate-active');
+}
+
+// Assets are ready: reveal "Tap to Play" and make ONLY the card clickable.
+function setStartupGateReady() {
+  if (!ui.loader) return;
+  ui.loader.classList.remove('hidden', 'is-loading');
+  ui.loader.classList.add('is-ready');
+  ui.loader.setAttribute('aria-busy', 'false');
+  if (ui.loaderCard) {
+    ui.loaderCard.setAttribute('role', 'button');
+    ui.loaderCard.setAttribute('tabindex', '0');
+    ui.loaderCard.setAttribute('aria-label', 'Tap to open the game');
+  }
+  if (ui.loaderText) ui.loaderText.hidden = false;
+  document.body.classList.add('startup-gate-active');
+}
+
 function hideStartupGate() {
   clearStartupGateListeners();
   document.body.classList.remove('startup-gate-active');
@@ -352,24 +526,30 @@ function hideStartupGate() {
 }
 
 function activateStartupGate(onOpen) {
-  if (!ui.loader) {
+  // Only the "Tap to Play" card starts the game. The full-screen overlay stays
+  // pointer-blocking (so clicks can't reach the game behind it) but is NOT a
+  // trigger — clicking/tapping anywhere except the card does nothing.
+  const trigger = ui.loaderCard || ui.loader;
+  if (!trigger) {
     onOpen?.();
     return;
   }
-  clearStartupGateListeners();
-  ui.loader.classList.remove('hidden');
-  document.body.classList.add('startup-gate-active');
+  setStartupGateReady();
+  ui.loaderCard?.focus?.();
   const openGate = (event) => {
     if (event.type === 'keydown' && !['Enter', ' ', 'Spacebar'].includes(event.key)) return;
     event.preventDefault?.();
+    // First user gesture: unlock/resume the Web Audio context so the voiceover
+    // boost is running before the first line plays.
+    resumeVoiceCtx();
     hideStartupGate();
     onOpen?.();
   };
-  ui.loader.addEventListener('pointerdown', openGate, { once: true });
-  document.addEventListener('keydown', openGate);
+  trigger.addEventListener('pointerdown', openGate, { once: true });
+  trigger.addEventListener('keydown', openGate);
   startupGateRelease = () => {
-    ui.loader.removeEventListener('pointerdown', openGate);
-    document.removeEventListener('keydown', openGate);
+    trigger.removeEventListener('pointerdown', openGate);
+    trigger.removeEventListener('keydown', openGate);
   };
 }
 
@@ -453,6 +633,7 @@ function playScreenVoice(path, onEnded, fallbackMs) {
   screenVoice.muted = state.muted;
   screenVoice.currentTime = 0;
   screenVoice.playbackRate = 1;
+  boostVoice(screenVoice);
   if (currentVoiceOnEnded) screenVoice.onended = currentVoiceOnEnded;
   screenVoice.play().catch(() => {
     // Autoplay blocked or load error: fall back to the timed advance so the
@@ -464,11 +645,12 @@ function playScreenVoice(path, onEnded, fallbackMs) {
   });
 }
 
-// First-screen voice prompt (behavior ported from the bubble-burst game): the
-// mascot's first bubble invites a click to start the voiceover, since browsers
-// block autoplay until the first user gesture.
-const VOICE_PROMPT_HTML = 'Click anywhere on the page <em>except the bubbles</em> to activate voice.';
-const VOICE_ACTIVATION_IGNORED = '#muteBtn, #resetGameBtn, #fullscreenBtn, #langBtn, #languagePopupOverlay';
+// Screen-1 voiceover is held until the first user gesture (browsers block audio
+// autoplay). The ONLY gesture that starts the game — and with it the voiceover —
+// is the "Tap to Play" loader tap (see activateStartupGate). Tapping/clicking
+// anywhere else does nothing. state.voiceActivated is flipped true by that tap
+// (and by "Play Again" on restart, itself a gesture), after which
+// renderInfoPageActivity plays the Screen-1 voiceover directly.
 let voiceActivationHandler = null;
 
 function clearVoiceActivation() {
@@ -476,19 +658,6 @@ function clearVoiceActivation() {
   document.removeEventListener('pointerdown', voiceActivationHandler);
   document.removeEventListener('touchstart', voiceActivationHandler);
   voiceActivationHandler = null;
-}
-
-// Arm a one-time "click anywhere (except the controls) to start the voiceover".
-function armVoiceActivation(onActivate) {
-  if (voiceActivationHandler) return;
-  voiceActivationHandler = (event) => {
-    if (event?.target?.closest?.(VOICE_ACTIVATION_IGNORED)) return;
-    clearVoiceActivation();
-    state.voiceActivated = true;
-    onActivate();
-  };
-  document.addEventListener('pointerdown', voiceActivationHandler);
-  document.addEventListener('touchstart', voiceActivationHandler);
 }
 
 function retryFirstPageInstructionIfNeeded() {
@@ -731,6 +900,7 @@ function playAudioSequence(sources, onDone) {
     const audio = new Audio(sources[index]);
     audio.muted = state.muted;
     audio.playbackRate = AUDIO_PLAYBACK_RATE;
+    boostVoice(audio);
     index += 1;
     activeAudio = audio;
     audio.onended = playNext;
@@ -810,9 +980,6 @@ function goToActivity() {
   resetActivityState();
   updateGameWithCircles();
   renderGame();
-  if (isFirstActivityScreen()) {
-    playFirstPageInstruction();
-  }
   const activity = getCurrentActivity();
 }
 
@@ -822,6 +989,7 @@ function goNextSceneOrComplete() {
   } else {
     state.phase = 'complete';
     state.step = GAME_STEPS;
+    trackGameCompletion();
     updateGameWithCircles();
     renderGame();
     if (!state.completeAudioPlayed) {
@@ -880,7 +1048,9 @@ function goToNextMythFrame() {
 function restartGame() {
   cancelVoice();
   clearVoiceActivation();
-  state.voiceActivated = false;
+  // "Play Again" is itself a user gesture, so audio is already unlocked — keep
+  // the voiceover activated so Screen 1 speaks again without another tap.
+  state.voiceActivated = true;
   sfx.firstPageInstruction.pause();
   sfx.firstPageInstruction.currentTime = 0;
   stopQuizTimer();
@@ -899,7 +1069,7 @@ function restartGame() {
   resetActivityState();
   updateGameWithCircles();
   renderGame();
-  playFirstPageInstruction();
+  startAnalyticsRun();
 }
 
 function renderScene(scene) {
@@ -1728,21 +1898,14 @@ function renderInfoPageActivity(activity) {
 
   // Intro has no footer button (advance by tapping the notification).
   setFooterButtons([]);
-  // Screen-1 sidebar: Avi's intro pose. The first bubble shows the click-to-activate
-  // prompt (voiceover waits for a tap, since browsers block autoplay). On the first
-  // click anywhere (except the controls) the bubble is restored to Avi's intro line
-  // and the Screen-1 voiceover plays.
+  // Screen-1 sidebar: Avi's intro pose with his intro line (always shown). The
+  // voiceover is held until the first user gesture unlocks audio; that gesture is
+  // the "Tap to Play" loader tap, which flips state.voiceActivated and re-renders
+  // this screen. So the user taps "Tap to Play" once and the voiceover starts —
+  // tapping anywhere else does nothing.
   const AVI_INTRO_SPEECH = "This alert looks scary. <strong>Let's find the fear tricks before we trust it!</strong>";
-  if (!state.voiceActivated) {
-    setGuide(AVI_BY_SCREEN.intro, VOICE_PROMPT_HTML);
-    document.querySelector('.tej-speech')?.classList.add('is-voice-prompt');
-    armVoiceActivation(() => {
-      document.querySelector('.tej-speech')?.classList.remove('is-voice-prompt');
-      setGuide(AVI_BY_SCREEN.intro, AVI_INTRO_SPEECH);
-      playScreenVoice(`${VOICEOVER_PATH}screen1_phone_notification.ogg`, null);
-    });
-  } else {
-    setGuide(AVI_BY_SCREEN.intro, AVI_INTRO_SPEECH);
+  setGuide(AVI_BY_SCREEN.intro, AVI_INTRO_SPEECH);
+  if (state.voiceActivated) {
     playScreenVoice(`${VOICEOVER_PATH}screen1_phone_notification.ogg`, null);
   }
 }
@@ -1964,6 +2127,16 @@ function checkSelection() {
     total: TRIGGER_IDS.length
   };
 
+  practiceQuestionAttempted({
+    category: GAME_CATEGORY,
+    question: 1,
+    selectedAnswer: selectedIds.join(', ') || 'none',
+    isCorrect: correct
+  });
+  // Only the first grading counts toward the completion event's score;
+  // Try Again re-checks don't overwrite it.
+  if (firstTryTriggerCorrect === null) firstTryTriggerCorrect = state.triggerScore.correct;
+
   words.forEach((word) => {
     const isTrigger = TRIGGER_IDS.includes(word.dataset.id);
     const isSelected = word.classList.contains('selected');
@@ -2028,7 +2201,7 @@ function showNextClue() {
 
   if (clueStep >= FEAR_TRIGGERS.length) {
     // Safe-action wrap-up, then unlock Finish + Replay.
-    setGuide(AVI_BY_SCREEN.explain, "Safe move: <strong>don't tap. Open the real app and ask a trusted adult.</strong>", COACH_SAFE);
+    setGuide(AVI_BY_SCREEN.explain, "Safe move: <strong>Don't tap. Open the real app and ask a trusted adult.</strong>", COACH_SAFE);
     playScreenVoice(`${VOICEOVER_PATH}screen6b_safe_action.ogg`, () => {
       setFooterButtons([
         { label: 'Replay', secondary: true, onClick: playClueReveal },
@@ -2054,6 +2227,7 @@ function showNextClue() {
 // Fear-triggers End screen — completion summary. No phone; celebratory Avi.
 function renderCompleteScreen() {
   state.step = 3; // Progress phase 3/3 ("Learn it": explain + complete)
+  trackGameCompletion();
   // Real fear-trigger score (set when the learner pressed Check). Default to a
   // zero score if somehow reached without grading, so we never fake a result.
   const score = state.triggerScore || { correct: 0, total: TRIGGER_IDS.length };
@@ -2119,7 +2293,10 @@ function renderCompleteScreen() {
   // App chrome (left panel + footer) is hidden via the .final-mission-stage CSS;
   // the in-board Play Again button restarts the activity.
   setFooterButtons([]);
-  ui.host.querySelector('.final-play-again').addEventListener('click', () => renderInfoPageActivity(getCurrentActivity()));
+  ui.host.querySelector('.final-play-again').addEventListener('click', () => {
+    startAnalyticsRun();
+    renderInfoPageActivity(getCurrentActivity());
+  });
   playScreenVoice(`${VOICEOVER_PATH}screen7_complete.ogg`, null);
 }
 
@@ -2636,8 +2813,70 @@ function setupControls() {
   document.addEventListener('fullscreenchange', syncFullscreenState);
 }
 
+// Images the game shows across its screens, preloaded before the "Tap to Play"
+// gate becomes clickable so nothing pops in mid-play.
+const GAME_IMAGE_ASSETS = [
+  './assets/images/loader.gif',
+  './assets/images/logo.webp',
+  './assets/images/phone.webp',
+  './assets/images/notification.webp',
+  './assets/images/avi/avi_screen1.webp',
+  './assets/images/avi/avi_screen2.webp',
+  './assets/images/avi/avi_screen3.webp',
+  './assets/images/avi/avi_screen4.webp',
+  './assets/images/avi/avi_screen5.webp',
+  './assets/images/avi/avi_end_screen.webp',
+  './assets/images/badge.webp',
+  './assets/images/final badge.webp',
+  './assets/images/sorting-final-icons/clipboard.webp',
+  './assets/images/sorting-final-icons/mission-shield.webp',
+  './assets/images/sorting-final-icons/target.webp'
+];
+
+function preloadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+}
+
+function preloadAudioReady(audio) {
+  return new Promise((resolve) => {
+    if (!audio || audio.readyState >= 3) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    audio.addEventListener('canplaythrough', finish, { once: true });
+    audio.addEventListener('error', finish, { once: true });
+    audio.load();
+    window.setTimeout(finish, 5000);
+  });
+}
+
+// Resolves once the game's visible assets (images, fonts, intro audio) are
+// ready, so the "Tap to Play" gate only becomes clickable after everything
+// has loaded.
+async function waitForGameAssets() {
+  const tasks = GAME_IMAGE_ASSETS.map(preloadImage);
+  if (document.fonts && document.fonts.ready) {
+    tasks.push(document.fonts.ready.catch(() => {}));
+  }
+  tasks.push(preloadAudioReady(sfx.firstPageInstruction));
+  tasks.push(preloadAudioReady(screenVoice));
+  await Promise.all(tasks);
+}
+
 async function initialize() {
-  const savedLanguage = localStorage.getItem('digital_safety_language');
+  setStartupGateLoading();
+  const savedLanguage = localStorage.getItem('digital_safety_language') || initialLang;
   if (savedLanguage && supportedLanguages[savedLanguage]) {
     currentLanguage = savedLanguage;
   }
@@ -2648,13 +2887,52 @@ async function initialize() {
   setupControls();
   setupLanguageSwitcher();
   renderGame();
+  // Keep the loader spinner up and non-clickable until the game's assets have
+  // finished loading; only then reveal the clickable "Tap to Play" gate.
+  await waitForGameAssets();
   activateStartupGate(() => {
-    playFirstPageInstruction();
+    startAnalyticsRun();
+    // The "Tap to Play" tap is the audio-unlocking gesture: mark voice activated
+    // and re-render so Screen 1 plays its voiceover.
+    state.voiceActivated = true;
+    renderGame();
+  });
+}
+
+// Pause any audio that is playing when the tab is hidden, and resume the very
+// same clips (from where they left off) when the tab becomes visible again.
+let audioPausedForHiddenTab = [];
+
+function pauseAudioForHiddenTab() {
+  audioPausedForHiddenTab = [];
+  const clips = [...Object.values(sfx), screenVoice, activeAudio];
+  clips.forEach((audio) => {
+    if (audio && !audio.paused && !audio.ended) {
+      audioPausedForHiddenTab.push(audio);
+      audio.pause();
+    }
+  });
+}
+
+function resumeAudioForVisibleTab() {
+  const clips = audioPausedForHiddenTab;
+  audioPausedForHiddenTab = [];
+  clips.forEach((audio) => {
+    if (audio && audio.paused && !audio.ended) {
+      audio.play().catch(() => {});
+    }
   });
 }
 
 window.addEventListener('beforeunload', cancelVoice);
-// NOTE: pageshow/visibilitychange no longer re-trigger the intro voiceover —
-// that re-rendered the game and bounced the user back to Screen 1 on tab switch.
-// The current screen now stays put; voiceovers are driven per-screen instead.
+// NOTE: visibilitychange only pauses/resumes the audio in place — it must NOT
+// re-trigger the intro voiceover or re-render the game (that used to bounce
+// the user back to Screen 1 on tab switch). The current screen stays put.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    pauseAudioForHiddenTab();
+  } else {
+    resumeAudioForVisibleTab();
+  }
+});
 window.addEventListener('load', initialize);

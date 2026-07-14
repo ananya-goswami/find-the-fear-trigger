@@ -1155,8 +1155,12 @@
   /* === FIT knob === scale() at the end shrinks the card to fit inside the
      phone screen. 0.6 = 60% (fits with margin). Lower = smaller, higher = wider.
      Put on `transform` (not the `scale:` knob above) so it composes with the
-     breathe pulse instead of being overridden by it. */
-  transform: translate(-33px, 45px) scale(0.58);
+     breathe pulse instead of being overridden by it.
+     Offsets are in % (of this element's box, which always equals the phone box)
+     so the card scales in lockstep with the phone as the game width changes and
+     never drifts off the phone screen. Calibrated at a 1046.8x741 phone box
+     (-33px/-3.15%, 45px/6.07%). */
+  transform: translate(-3.15%, 6.07%) scale(0.58);
   /* Scale grows around the card's centre (not the canvas centre) so the breathe
      pulse below stays in place instead of drifting. */
   transform-origin: 50% 42%;
@@ -1189,7 +1193,10 @@
   top: 39%;
   width: 18%;
   height: 11%;
-  transform: translate(-38px, 45px);
+  /* % of this button's own box (18%x11% of the frame) so the tap target tracks
+     the card as the phone scales with the game width. Matches the card's
+     -38px/45px nudge at the 1046.8x741 calibration box. */
+  transform: translate(-20.2%, 55.2%);
   z-index: 3;
   background: transparent;
   border: 0;
@@ -1397,17 +1404,17 @@
 
 .phone-sms-name { font-size: 1.05em; font-weight: 800; }
 
-.phone-sms-body { padding: 5% 5% 0; }
+.phone-sms-body { padding: 3.5% 5% 0; }
 
 /* Incoming (left) message bubble */
 .phone-sms-bubble {
   max-width: 92%;
   background: #fff;
   border-radius: 0.35em 1em 1em 1em;
-  padding: 0.8em 0.85em;
+  padding: 0.65em 0.8em;
   font-size: 0.95em;
   font-weight: 700;
-  line-height: 1.6;
+  line-height: 1.45;
   color: #0c1535;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
@@ -1424,21 +1431,38 @@
   border: 2px solid transparent;
   border-radius: 0.5em;
   background: transparent;
-  padding: 0.04em 0.14em;
+  /* Minimal horizontal padding in the RESTING state so the boxable words don't
+     add extra space around themselves — every word then sits with just the normal
+     space between it and the next, giving even gaps. Comfortable box padding is
+     added back only in the boxing/interactive state below. */
+  padding: 0.04em 0.04em;
   cursor: default;
   pointer-events: none;
   transition: border-color 0.15s, background 0.15s;
 }
 
-/* Boxed phase: open up line height so the boxes (and their glow) don't crowd. */
+/* Boxed phase: size the boxed message PROPORTIONALLY to the phone, using the same
+   min(56vw, 100vh-210px) expression that drives the phone height. The phone screen
+   box is a fixed % of the phone, so tying the font to the same value keeps the
+   message at a constant fraction of the screen at EVERY window size — it fills the
+   space generously on big screens AND can never crop as the width shrinks (the
+   ratio doesn't change). The .sms-word boxes inherit this and their em margins
+   scale with it. === BOXED MESSAGE SIZE knob === raise 0.026 to fill more (watch
+   the bottom box), lower it if it ever touches the phone's edge. */
 .phone-sms-bubble.boxing-active {
-  line-height: 2.1;
+  line-height: 1.6;
+  font-size: clamp(7px, calc(min(56vw, 100vh - 210px) * 0.026), 40px);
+  padding: 0.6em 0.8em;
 }
 
 /* Default boxes: clean blue, white fill, subtle 3D (no glow yet) — like image 2. */
 .phone-sms-bubble.boxing-active .sms-word {
   display: inline-block;
-  margin: 0.18em 0.16em;
+  /* Tight vertical margin so the stacked boxes fit the screen; still enough gap
+     to read as separate, tappable boxes. */
+  margin: 0.06em 0.14em;
+  /* Comfortable box padding for the interactive/boxed look. */
+  padding: 0.05em 0.16em;
   border-color: #2f6fe0;
   background: #fff;
   box-shadow: 0 1.5px 3px rgba(40, 40, 80, 0.16);
@@ -1490,13 +1514,29 @@
   background: #fff7e9;
 }
 
+/* After Check: any box that is NOT a graded answer (i.e. a non-trigger distractor
+   the learner correctly left unselected, like "Your SBI account" / "Verify now")
+   should drop the leftover blue "box" styling and read as plain text — only the
+   real triggers stay highlighted (green = correct, dashed amber = missed) and
+   wrongly-boxed words stay red. Higher specificity than the boxing-active default
+   so it wins. (Fixes BUG_BM_04.) */
+.phone-sms-bubble.checked .sms-word:not(.correct):not(.wrong):not(.missed) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
 /* === Screen 5 — explanation: words read-only, one highlighted at a time. === */
-.phone-sms-bubble--explain { line-height: 2.1; }
+/* Tightened line spacing (was 2.1) so the whole message fits inside the phone
+   screen without the last line (verify.xyz) running off the bottom. Only one word
+   is highlighted at a time, so the glow never needs room from its neighbours. */
+.phone-sms-bubble--explain { line-height: 1.6; }
 .phone-sms-bubble--explain .sms-word {
   display: inline-block;
   /* Tight horizontal margin so words sit at natural spacing (the wide gap made
-     ':' and '.' look detached); vertical margin keeps room for the clue glow. */
-  margin: 0.16em 0.02em;
+     ':' and '.' look detached); small vertical margin keeps a little room for the
+     clue glow while keeping the message compact. */
+  margin: 0.08em 0.02em;
   border-color: transparent;
 }
 .phone-sms-bubble--explain .sms-word.clue-active {
@@ -2747,8 +2787,8 @@ body:has(.sort-stage) #muteBtn {
 }
 
 body:has(.sort-stage) .icon-circle {
-  width: 56px;
-  height: 56px;
+  width: clamp(32px, 4vw, 56px);
+  height: clamp(32px, 4vw, 56px);
   border: 1px solid #d7cbff;
   background: rgba(247, 243, 255, 0.92);
   color: #fff;
@@ -2756,8 +2796,8 @@ body:has(.sort-stage) .icon-circle {
 }
 
 body:has(.sort-stage) .icon-circle svg {
-  width: 32px;
-  height: 32px;
+  width: clamp(20px, 2.5vw, 32px);
+  height: clamp(20px, 2.5vw, 32px);
   color: #495a7a;
 }
 
@@ -2766,7 +2806,11 @@ body:has(.sort-stage) .content {
 }
 
 body:has(.sort-stage) .left-panel {
-  flex: 0 0 clamp(300px, 25.8vw, 430px);
+  /* Shrinks continuously as the game width decreases (so the main play area
+     gains space/focus), while matching the previous ~360px at 1400w and capping
+     at 430px on large screens. The calc() offset keeps the wide-end unchanged;
+     the low floor lets it keep shrinking on narrow landscape screens. */
+  flex: 0 0 clamp(240px, calc(80px + 20vw), 430px);
   gap: 10px;
   padding: 12px 12px 10px;
   overflow: hidden;
@@ -2875,35 +2919,6 @@ body:has(.sort-stage) .answer-card {
 .tej-speech em {
   color: #e8326d;
   font-style: normal;
-}
-
-/* Golden "click anywhere to activate voice" prompt bubble + pop effect,
-   copied from the bubble-burst game's .zara-speech.is-voice-prompt. */
-.tej-speech.is-voice-prompt {
-  background: linear-gradient(180deg, #fff8d6 0%, #ffe58a 100%);
-  border: 2px solid #f2b91f;
-  color: #6d4900;
-  box-shadow: 0 0 0 0 rgba(242, 185, 31, 0.4), 0 14px 28px rgba(191, 128, 0, 0.24);
-  animation: voice-prompt-pulse 1.6s ease-in-out infinite;
-}
-
-.tej-speech.is-voice-prompt::after {
-  border-top-color: #ffe58a;
-}
-
-.tej-speech.is-voice-prompt em {
-  color: #b56a00;
-}
-
-@keyframes voice-prompt-pulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(242, 185, 31, 0.18), 0 14px 28px rgba(191, 128, 0, 0.18);
-  }
-  50% {
-    transform: scale(1.045);
-    box-shadow: 0 0 28px 10px rgba(255, 208, 63, 0.45), 0 18px 34px rgba(191, 128, 0, 0.3);
-  }
 }
 
 body:has(.sort-stage) #coachCard {
@@ -3347,8 +3362,8 @@ body:has(.sort-final-stage) .top-bar {
 }
 
 body:has(.sort-final-stage) .icon-circle {
-  width: 56px;
-  height: 56px;
+  width: clamp(32px, 4vw, 56px);
+  height: clamp(32px, 4vw, 56px);
   border: 1px solid #c8b8ff;
   background: rgba(80, 51, 184, 0.92);
   color: #fff;
@@ -3356,8 +3371,8 @@ body:has(.sort-final-stage) .icon-circle {
 }
 
 body:has(.sort-final-stage) .icon-circle svg {
-  width: 32px;
-  height: 32px;
+  width: clamp(20px, 2.5vw, 32px);
+  height: clamp(20px, 2.5vw, 32px);
   color: #fff;
 }
 
@@ -3786,8 +3801,11 @@ body:has(.classify-grid) #fullscreenBtn {
 }
 
 body:has(.classify-grid) .icon-circle {
-  width: 56px;
-  height: 56px;
+  /* Larger coefficient so the icons stay a comfortable size as the game width
+     shrinks (they read too small at ~4vw on mid widths), while the 56px cap keeps
+     them from getting oversized on the full/original screen. */
+  width: clamp(42px, 4.8vw, 56px);
+  height: clamp(42px, 4.8vw, 56px);
   border: 1px solid #d7cbff;
   background: rgba(247, 243, 255, 0.92);
   color: #fff;
@@ -3795,8 +3813,8 @@ body:has(.classify-grid) .icon-circle {
 }
 
 body:has(.classify-grid) .icon-circle svg {
-  width: 32px;
-  height: 32px;
+  width: clamp(21px, 2.5vw, 28px);
+  height: clamp(21px, 2.5vw, 28px);
   color: #495a7a;
 }
 
@@ -3805,7 +3823,10 @@ body:has(.classify-grid) .content {
 }
 
 body:has(.classify-grid) .left-panel {
-  flex: 0 0 clamp(300px, 23vw, 380px);
+  /* Original width on wide screens (~380px), but keeps shrinking as the game
+     width decreases (lower floor) so the board still gains room on smaller
+     landscape screens. */
+  flex: 0 0 clamp(190px, calc(70px + 18vw), 380px);
   gap: 10px;
   padding: 12px 12px 10px;
   overflow: hidden;
@@ -3861,28 +3882,33 @@ body:has(.classify-grid) .answer-card {
 }
 
 body:has(.classify-grid) .tej-guide {
-  min-height: clamp(185px, 28vh, 270px);
+  /* Modest floor + flex:1 (from the base rule) fills whatever space is left in the
+     sidebar. A large min-height here overflowed the sidebar on tall screens, and
+     .answer-card's flex-end then pushed the guide UP under the heading, clipping
+     the bubble's top — so keep the floor small and let flex do the sizing. */
+  min-height: clamp(140px, 22vh, 240px);
   overflow: hidden;
 }
 
 body:has(.classify-grid) .tej-guide-image {
-  /* Lifted up (was -42px) so Avi's extended hand isn't cropped at the bottom.
-     Higher value = higher up. If his head starts cropping, lower it back down. */
+  /* Big enough to fill the vacant sidebar space, but scales with both width and
+     height (min of vw/vh) and has a low floor so on short sidebars he shrinks
+     enough to stay clear of the bubble above (no collision). */
   bottom: -12px;
-  left: -22px;
-  width: clamp(205px, min(18vw, 34vh), 285px);
+  left: -14px;
+  width: clamp(122px, min(20vw, 32vh), 280px);
 }
 
 body:has(.classify-grid) .tej-speech {
-  /* Bubble + its text moved down a little (was 8px). Increase to drop further. */
-  top: 30px;
+  /* Clean rounded-rectangle bubble pinned at the top of the guide, so it always
+     sits ABOVE Avi with clear space (never covering his face). */
+  top: 8px;
   right: 2px;
-  /* Narrowed (was 80%) so the bubble's left edge clears Avi's head. Tune this:
-     smaller = clears more but may wrap to more lines. */
-  width: 62%;
-  padding: 12px 9px;
-  border-radius: 22px;
-  font-size: clamp(0.875rem, 0.95vw, 0.98rem);
+  width: 92%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  line-height: 1.28;
+  font-size: clamp(0.78rem, 0.92vw, 0.98rem);
 }
 
 body:has(.classify-grid) #coachCard {
@@ -4538,12 +4564,17 @@ body:has(.classify-grid) .icon-circle {
 body:has(.classify-grid) .activity-panel {
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
-  padding: clamp(86px, 13vh, 112px) 12px 92px;
+  /* Trimmed top/bottom padding so the phone (in the 1fr row) has more height. The
+     bottom value still leaves a clear gap for the footer button. */
+  padding: clamp(70px, 10vh, 94px) 12px clamp(52px, 7vh, 72px);
 }
 
 body:has(.classify-grid) .mobile-mission-banner {
   min-height: 0;
-  width: min(520px, 56%);
+  /* Narrower centred banner so its right edge stays clear of the top-right
+     icons as the game width shrinks (was 56%, which overlapped the mute button
+     on small screens). */
+  width: min(500px, 46%);
 }
 
 /* Screen 2 banner: no icon/tagline, so shrink the box to hug the title text.
@@ -4551,7 +4582,10 @@ body:has(.classify-grid) .mobile-mission-banner {
    height, so the phone below (top-anchored flow) stays in the same place. */
 body:has(.classify-grid) .mobile-mission-banner--compact {
   width: fit-content;
-  max-width: 84%;
+  /* Cap so a wide title wraps instead of growing past the top-right icons (on
+     the right) or over the left panel (on the left) once shifted. The calc()
+     reserves ~132px for the icon zone on small screens; 84% governs wide ones. */
+  max-width: min(84%, calc(100% - 132px));
   padding: clamp(8px, 1.5vh, 13px) clamp(24px, 3.2vw, 38px);
 }
 
@@ -4703,16 +4737,116 @@ body:has(.classify-grid-empty) .mobile-mission-banner {
   margin: 0 auto;
 }
 
+/* Screen 1's banner (title + subtitle, non-compact) is widened enough to keep
+   the title ("Find the Fear Triggers") on a SINGLE line. The calc() still
+   reserves ~120px so the box stays clear of the top-right icons and the left
+   panel on smaller screens (below ~750px wide the title wraps gracefully). */
+body:has(.classify-grid-empty) .mobile-mission-banner:not(.mobile-mission-banner--compact) {
+  width: min(560px, calc(100% - 120px));
+}
+
 /* Shift BOTH top boxes (banner + progress) together as a unit.
    1st value = horizontal, 2nd = vertical (positive = down, negative = up).
-   It's a transform, so the phone and everything else stay put. */
+   It's a transform, so the phone and everything else stay put.
+   A small constant left shift re-centres the boxes into the space left of the
+   top-right icons. It must stay small (wide banners are kept in-bounds by the
+   max-width cap below) so the banner never spills over the left panel. */
 body:has(.classify-grid-empty) .mobile-mission-banner,
 body:has(.classify-grid-empty) .mobile-screen-progress {
-  transform: translate(-40px, -15px);
+  transform: translate(-60px, -15px);
 }
 
 body:has(.classify-grid-empty) .classify-intro-panel {
   min-height: 0;
+}
+
+/* Real, layout-respecting size (no scale() hacks — those overflowed). The phone
+   is driven by width (52vw) so it grows/shrinks with the game width, but is capped
+   by the height actually available after the banner/progress (calc), so it fills
+   the space and can NEVER overflow the top or bottom at any window size. */
+body:has(.classify-grid-empty) .intro-phone-image {
+  /* This sets the phone's LAYOUT height (bounded by the grid row). The visible
+     phone is then grown VISUALLY by the scale() on .intro-phone-frame below —
+     raising this vw/max-width just overflows the row and clips, so the scale is
+     the real size knob for this screen. */
+  height: min(56vw, calc(100vh - 210px));
+  max-height: none;
+  max-width: 100%;
+  width: auto;
+  flex-shrink: 0;
+}
+
+/* Tie the phone-screen overlay text to the SAME expression that sizes the phone
+   height, so the message/inbox text scales in lockstep with the phone. Previously
+   the text was viewport-based (1.15vw) while the phone box is a % of the phone, so
+   when the phone got height-limited (short/wide windows) the box shrank but the
+   text didn't and the message clipped. The 0.0175 factor is a touch below the old
+   size so the full SMS (through the URL) fits inside the screen box.
+   === PHONE TEXT SIZE knob === bigger factor = bigger text. */
+body:has(.classify-grid-empty) .phone-inbox,
+body:has(.classify-grid-empty) .phone-sms {
+  font-size: clamp(10px, calc(min(56vw, 100vh - 210px) * 0.0195), 16px);
+}
+
+/* All intro screens: make Avi's speech a squarish box parked at the upper-RIGHT,
+   beside Avi (he sits bottom-left), instead of a full-width strip above him.
+   The font is kept small/tight so even the longer lock-screen intro text fits
+   fully inside the box (no clipping) while the box stays roughly square.
+   Placed after the shared `body:has(.classify-grid) .tej-speech` rule so it wins
+   (same specificity → source order decides). The sort screen keeps its bubble.
+   === BUBBLE TEXT knob === lower the clamp values if any screen still clips. */
+body:has(.classify-grid-empty) .tej-speech {
+  top: 10px;
+  right: 6px;
+  left: auto;
+  width: 50%;
+  padding: 11px 12px;
+  border-radius: 18px;
+  line-height: 1.3;
+  font-size: clamp(0.72rem, 1vw, 0.95rem);
+}
+
+/* Tail points down toward Avi's raised hand at the bubble's lower-left corner. */
+body:has(.classify-grid-empty) .tej-speech::after {
+  left: 18px;
+  right: auto;
+  bottom: -15px;
+  border-width: 9px;
+  border-top-color: #fff;
+}
+
+/* Explain screen (screen 3/3) only: it has the LONGEST coach line, which wraps to
+   too many lines in the squarish box and overflows the guide (cropping the last
+   line). Shrink just this screen's bubble text + widen it a touch + tighten the
+   line spacing so the whole line fits. Scoped to the explain phone (no other
+   screen changes). Placed after the rule above so it wins (source order). */
+body:has(.phone-sms-bubble--explain) .tej-speech {
+  width: 56%;
+  line-height: 1.22;
+  font-size: clamp(0.56rem, 0.8vw, 0.82rem);
+}
+
+body:has(.classify-grid-empty) .intro-phone-wrap,
+body:has(.classify-grid-empty) .intro-phone-frame {
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+body:has(.classify-grid-empty) .intro-phone-frame {
+  /* === PHONE SIZE knob === scale() grows the visible phone without changing its
+     layout box. 1.35 is the original size that fits the full/original screen.
+     On narrower widths (where vacant space opens up below the phone) it's bumped
+     up in the media query below. */
+  transform: translateY(-20px) scale(1.35);
+  transform-origin: center;
+}
+
+/* Narrower widths only: the phone shrinks with the game width but the vacant
+   space below it grows, so enlarge it there (full screen keeps the 1.35 above). */
+@media (max-width: 1200px) {
+  body:has(.classify-grid-empty) .intro-phone-frame {
+    transform: translateY(-15px) scale(1.48);
+  }
 }
 
 body:has(.classify-grid-empty) .footer-buttons {
@@ -4767,8 +4901,8 @@ body:has(.final-mission-stage) .top-icons {
 }
 
 body:has(.final-mission-stage) .icon-circle {
-  width: 56px;
-  height: 56px;
+  width: clamp(32px, 4vw, 56px);
+  height: clamp(32px, 4vw, 56px);
   border: 1px solid #d7cbff;
   background: rgba(247, 243, 255, 0.92);
   color: #495a7a;
@@ -4782,8 +4916,8 @@ body:has(.final-mission-stage) #langBtn {
 }
 
 body:has(.final-mission-stage) .icon-circle svg {
-  width: 32px;
-  height: 32px;
+  width: clamp(20px, 2.5vw, 32px);
+  height: clamp(20px, 2.5vw, 32px);
   color: #495a7a;
 }
 
@@ -4820,7 +4954,9 @@ body:has(.final-mission-stage) .interaction-host-area {
 .final-mission-stage {
   position: relative;
   display: grid;
-  grid-template-columns: clamp(240px, 20vw, 330px) 1fr;
+  /* Narrower side column so the celebration board (Great Job + What You Learned)
+     gets more room and keeps growing as the width shrinks. */
+  grid-template-columns: clamp(178px, 15vw, 300px) 1fr;
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
@@ -4892,17 +5028,23 @@ body:has(.final-mission-stage) .interaction-host-area {
   font-weight: 1000;
 }
 
+/* Centred vertical stack (icon on top, then label / number / "Great work!") so it
+   matches the Mission card above and — crucially — the number/labels get the full
+   box width and never wrap. The end-screen left panel is narrow (~286px), so the
+   old 2-column (icon | text) layout squeezed the text column to ~128px and the big
+   "0 / 4" broke onto 3 lines. Stacking fixes that at every width. */
 .final-found-card {
   display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  text-align: center;
+  gap: 4px;
   padding: clamp(8px, 1.4vh, 15px) 14px;
 }
 
 .final-found-card div {
   display: grid;
-  justify-items: start;
+  justify-items: center;
 }
 
 .final-found-card strong,
@@ -4916,6 +5058,7 @@ body:has(.final-mission-stage) .interaction-host-area {
   font-family: 'Lilita One', sans-serif;
   font-size: clamp(2rem, 3.7vw, 3.5rem);
   line-height: 0.95;
+  white-space: nowrap;
 }
 
 .final-target-icon {
@@ -4923,6 +5066,7 @@ body:has(.final-mission-stage) .interaction-host-area {
   height: clamp(62px, 7vw, 98px);
   object-fit: contain;
 }
+
 
 /* === Activity_3 complete screen — left sidebar spacing. The mission cards sit
    in .answer-card, which the classify-grid layout pins to the bottom (lots of
@@ -5019,9 +5163,14 @@ body:has(.final-mission-stage) .interaction-host-area {
   top: clamp(12px, 2.8vh, 26px);
   left: 50%;
   z-index: 5;
-  width: min(820px, 72%);
+  /* Capped + nudged left so the big title (e.g. "Great Job, Avi!") clears the
+     top-right mute/fullscreen icons instead of running under them. The left shift
+     is only applied on narrow screens (where the title is close to the icons);
+     it fades to 0 by ~1250px so the centred subtitle isn't pushed left into Avi
+     on wider screens. */
+  width: min(760px, 68%);
   text-align: center;
-  transform: translateX(-50%);
+  transform: translateX(calc(-50% - clamp(0px, calc(200px - 16vw), 56px)));
 }
 
 .final-heading h3 {
@@ -5051,7 +5200,9 @@ body:has(.final-mission-stage) .interaction-host-area {
 }
 
 .final-heading p {
-  width: min(720px, 88%);
+  /* Narrower than before (was 720px/88%) so the centred subtitle stays clear of
+     Avi's column on the left at mid widths. */
+  width: min(540px, 80%);
   margin: 8px auto 0;
   color: #263f80;
   font-size: clamp(0.92rem, 1.55vw, 1.42rem);
@@ -5079,7 +5230,10 @@ body:has(.final-mission-stage) .interaction-host-area {
   /* Nudged left (was 4%) so Avi's thumb/arm clears the heading subtitle. */
   left: -2%;
   bottom: 0;
-  width: clamp(190px, 22vw, 340px);
+  /* Slightly smaller than before (was 22vw / 340px). Avi is bottom-anchored, so a
+     smaller figure raises only his HEAD (feet stay put) — keeping his head clear
+     of the centred subtitle on shorter viewports, without touching the panel below. */
+  width: clamp(180px, 19vw, 300px);
 }
 
 .final-shield {
@@ -5400,12 +5554,14 @@ body:has(.classify-grid) .footer-buttons .btn:disabled::before {
 
 /* Feedback screen: two action buttons must sit fully visible under the phone. */
 body:has(.classify-grid-empty) .check-btn-wrap.fear-feedback-actions {
-  width: min(470px, 38vw);
+  /* Keep a solid minimum width so BOTH pills ("Try Again" / "Learn Why") stay
+     fully visible as the game width shrinks (was min(470px, 38vw), which got too
+     narrow for two buttons on smaller screens and clipped their labels). */
+  width: clamp(300px, 48vw, 480px);
   /* Matched EXACTLY to the BACK button's bottom (game.css ~4686) so they sit at
-     the same Y and don't get clipped by .right-panel's overflow:hidden. Same
-     X-axis offset too. Keep this in sync if you retune the BACK button. */
+     the same Y and don't get clipped by .right-panel's overflow:hidden. */
   bottom: clamp(-11px, -0.2vh, -6px);
-  transform: translateX(calc(-50% - 25px));
+  transform: translateX(calc(-50% - 12px));
 }
 
 body:has(.classify-grid-empty) .check-btn-wrap.fear-feedback-actions .footer-actions {

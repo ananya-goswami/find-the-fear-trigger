@@ -78,6 +78,7 @@ html,
 body {
   height: 100%;
   overflow: hidden;
+  user-select: none;
 }
 
 body,
@@ -167,8 +168,10 @@ button {
 }
 
 .icon-circle {
-  width: 56px;
-  height: 56px;
+  /* Shrink with screen WIDTH (vw): full 56px on wide screens, smaller as the
+     window narrows. */
+  width: clamp(32px, 4vw, 56px);
+  height: clamp(32px, 4vw, 56px);
   border: 1px solid var(--brand-secondary);
   border-radius: 50%;
   display: flex;
@@ -193,8 +196,8 @@ button {
 }
 
 .icon-circle svg {
-  width: 24px;
-  height: 24px;
+  width: clamp(15px, 1.9vw, 24px);
+  height: clamp(15px, 1.9vw, 24px);
   display: block;
   flex-shrink: 0;
   color: var(--brand-secondary);
@@ -429,6 +432,29 @@ button {
   transition: opacity 0.5s ease, visibility 0.5s ease;
 }
 
+/* Spinner-only phase: the gate is visible but cannot be tapped until the
+   game's assets have finished loading. */
+.loader-overlay.is-loading {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Overlay stays pointer-blocking so clicks can't reach the game behind it, but
+   only the "Tap to Play" card is the actual trigger (see activateStartupGate). */
+.loader-overlay.is-ready {
+  cursor: default;
+  pointer-events: auto;
+}
+
+.loader-overlay.is-ready .loader-overlay-card {
+  cursor: pointer;
+}
+
+.loader-overlay-card:focus,
+.loader-overlay-card:focus-visible {
+  outline: none;
+}
+
 .loader-overlay.hidden {
   opacity: 0;
   visibility: hidden;
@@ -437,6 +463,7 @@ button {
 
 .loader-overlay img {
   width: 80px;
+  transform: translateY(20px);
 }
 
 .loader-overlay-card {
@@ -1011,15 +1038,8 @@ body.startup-gate-active .app-container {
     gap: 10px;
   }
 
-  .icon-circle {
-    width: 44px;
-    height: 44px;
-  }
-
-  .icon-circle svg {
-    width: 24px;
-    height: 24px;
-  }
+  /* Icon size is handled by the width-based clamp() on the base .icon-circle
+     rules, so no fixed override is needed here. */
 
   .status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
