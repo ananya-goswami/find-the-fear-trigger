@@ -2816,7 +2816,7 @@ function setupControls() {
 // Images the game shows across its screens, preloaded before the "Tap to Play"
 // gate becomes clickable so nothing pops in mid-play.
 const GAME_IMAGE_ASSETS = [
-  './assets/images/loader.gif',
+  './assets/images/loader.webp',
   './assets/images/logo.webp',
   './assets/images/phone.webp',
   './assets/images/notification.webp',
