@@ -4867,13 +4867,14 @@ body:has(.classify-grid-empty) .intro-phone-frame {
 body:has(.classify-grid-empty) .footer-buttons {
   /* Floated near the bottom edge of the play area (below the phone) so the
      Back/Continue button is visible and clears the phone (no overlap/touch). */
-  /* === BACK / CHECK BUTTON Y knob === more positive = lower on screen. THIS is
-     the rule for the inbox "Back" + select "Check" buttons (no fear-* class).
-     Kept >= 0 so the button never rides up under the enlarged phone mockup
-     (fixes BUG_FFT_07 — button was overlapping the phone in both windowed and
-     fullscreen mode). */
+  /* === BACK / CHECK BUTTON Y knob === SMALLER = lower on screen (it is a
+     `bottom` offset). THIS is the rule for the inbox "Back" + select "Check"
+     buttons (no fear-* class). Kept >= 0 so the button never rides up under the
+     phone mockup (fixes BUG_FFT_07). Lowered from clamp(10px, 5vh, 16px) to sit
+     nearer the bottom edge: that spare space was unused, and spending it here
+     buys clearance from the phone without shrinking the phone. */
   position: absolute;
-  bottom: clamp(10px, 5vh, 16px);
+  bottom: 4px;
   left: 50%;
   transform: translateX(calc(-50% - 25px));
   margin: 0;
