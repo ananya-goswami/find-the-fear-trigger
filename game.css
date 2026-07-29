@@ -5577,10 +5577,15 @@ body:has(.classify-grid-empty) .check-btn-wrap.fear-feedback-actions {
      fully visible as the game width shrinks (was min(470px, 38vw), which got too
      narrow for two buttons on smaller screens and clipped their labels). */
   width: clamp(300px, 48vw, 480px);
-  /* Matched EXACTLY to the BACK button's bottom (game.css ~4686) so they sit at
-     the same Y and don't get clipped by .right-panel's overflow:hidden. */
-  bottom: clamp(-11px, -0.2vh, -6px);
-  transform: translateX(calc(-50% - 12px));
+  /* Matched EXACTLY to the BACK / CHECK button's bottom so they sit at the same Y
+     and don't get clipped by .right-panel's overflow:hidden. This was a NEGATIVE
+     offset, which hung the pills past the panel's bottom edge and clipped them;
+     keep it in step with `body:has(.classify-grid-empty) .footer-buttons`. */
+  bottom: 4px;
+  /* Same horizontal nudge as Back/Check (-25px), which compensates for the phone
+     graphic sitting slightly left of its image centre. Was -12px, leaving these
+     two pills ~13px right of the phone's axis. */
+  transform: translateX(calc(-50% - 25px));
 }
 
 body:has(.classify-grid-empty) .check-btn-wrap.fear-feedback-actions .footer-actions {
@@ -6237,8 +6242,9 @@ body:has(.ft-complete) .final-activity-sidebar .final-found-card b {
 
 body:has(.classify-grid-empty) .check-btn-wrap.fear-explain-actions {
   width: min(520px, 42vw) !important;
-  /* Same Y as the BACK / feedback / CHECK buttons (the "previous buttons"). */
-  bottom: clamp(-11px, -0.2vh, -6px) !important;
+  /* Same Y as the BACK / feedback / CHECK buttons (the "previous buttons"). Was a
+     negative offset, which pushed these past the panel's bottom edge. */
+  bottom: 4px !important;
   transform: translateX(calc(-50% - 25px)) !important;
 }
 
