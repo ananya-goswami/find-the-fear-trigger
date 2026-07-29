@@ -4769,21 +4769,21 @@ body:has(.classify-grid-empty) .classify-intro-panel {
    size knob now (no scale layer) — raise the vw or lower the reserved px to
    grow the phone; if the footer button ever touches it again, raise the
    reserved px instead of re-adding a scale() transform. */
+/* phone.webp is a 3270x1924 LANDSCAPE canvas and the visible phone only occupies
+   x 33%-62.7% / y 16%-86.3% of it (pixel-measured). So ~13.7% of this element's
+   height below the phone is transparent padding, and ~70% of its width is
+   transparent on the sides. Sizing the element to "fit" therefore left a big
+   visible gap under the phone. Divide by 0.703 so the VISIBLE phone (not the
+   padded box) fills the available height, and allow the transparent sides to
+   overflow — .right-panel has overflow:hidden, so they're clipped, and the
+   footer button sits above this via z-index.
+   === PHONE SIZE knob === lower the reserved px to grow the phone. */
 body:has(.classify-grid-empty) .intro-phone-image {
-  height: min(56vw, calc(100vh - 205px));
+  height: min(118vw, calc(90vh - 18px));
   max-height: none;
-  max-width: 100%;
+  max-width: none;
   width: auto;
   flex-shrink: 0;
-}
-
-/* Screen 1 (lock-notification, before the SBI alert is tapped) has NO footer
-   button yet — #footerActions is still empty there — so the reserve above
-   (sized to clear the Back/Check button on the later screens) only wastes
-   vertical space on this screen. Let the phone use that space here, since
-   there is nothing below it to collide with. */
-body:has(.classify-grid-empty) .right-panel:not(:has(#footerActions .btn)) .intro-phone-image {
-  height: min(56vw, calc(100vh - 125px));
 }
 
 /* Tie the phone-screen overlay text to the SAME expression that sizes the phone
@@ -4795,7 +4795,7 @@ body:has(.classify-grid-empty) .right-panel:not(:has(#footerActions .btn)) .intr
    === PHONE TEXT SIZE knob === bigger factor = bigger text. */
 body:has(.classify-grid-empty) .phone-inbox,
 body:has(.classify-grid-empty) .phone-sms {
-  font-size: clamp(10px, calc(min(56vw, 100vh - 200px) * 0.0195), 16px);
+  font-size: clamp(10px, calc(min(118vw, 90vh - 18px) * 0.0195), 22px);
 }
 
 /* All intro screens: make Avi's speech a squarish box parked at the upper-RIGHT,
