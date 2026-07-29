@@ -2913,7 +2913,7 @@ body:has(.sort-stage) .answer-card {
 
 .tej-speech strong {
   display: block;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .tej-speech em {
@@ -4706,7 +4706,7 @@ body:has(.classify-grid-empty) .right-panel {
   /* === SHIFT-ALL-IN-Y knob === moves the WHOLE intro stack (banner + progress
      + phone) together vertically. Positive = down, negative = up. Transform, so
      nothing outside the intro is affected. */
-  transform: translateY(-7px);
+  transform: translateY(-10px);
 }
 
 body:has(.classify-grid-empty) .canvas-block,
@@ -4760,16 +4760,17 @@ body:has(.classify-grid-empty) .classify-intro-panel {
   min-height: 0;
 }
 
-/* Real, layout-respecting size (no scale() hacks — those overflowed). The phone
-   is driven by width (52vw) so it grows/shrinks with the game width, but is capped
-   by the height actually available after the banner/progress (calc), so it fills
-   the space and can NEVER overflow the top or bottom at any window size. */
+/* Real, layout-respecting size (no scale() hacks — those overflowed past this
+   box into the footer button; see BUG_FFT_07). The phone is driven by width
+   (56vw) so it grows/shrinks with the game width, but is capped by the height
+   actually available after the banner/progress AND the absolutely-positioned
+   footer button below (calc), so it fills the space and can NEVER overflow the
+   top or bottom at any window size. === PHONE SIZE knob === this IS the real
+   size knob now (no scale layer) — raise the vw or lower the reserved px to
+   grow the phone; if the footer button ever touches it again, raise the
+   reserved px instead of re-adding a scale() transform. */
 body:has(.classify-grid-empty) .intro-phone-image {
-  /* This sets the phone's LAYOUT height (bounded by the grid row). The visible
-     phone is then grown VISUALLY by the scale() on .intro-phone-frame below —
-     raising this vw/max-width just overflows the row and clips, so the scale is
-     the real size knob for this screen. */
-  height: min(56vw, calc(100vh - 210px));
+  height: min(56vw, calc(100vh - 280px));
   max-height: none;
   max-width: 100%;
   width: auto;
@@ -4785,7 +4786,7 @@ body:has(.classify-grid-empty) .intro-phone-image {
    === PHONE TEXT SIZE knob === bigger factor = bigger text. */
 body:has(.classify-grid-empty) .phone-inbox,
 body:has(.classify-grid-empty) .phone-sms {
-  font-size: clamp(10px, calc(min(56vw, 100vh - 210px) * 0.0195), 16px);
+  font-size: clamp(10px, calc(min(56vw, 100vh - 280px) * 0.0195), 16px);
 }
 
 /* All intro screens: make Avi's speech a squarish box parked at the upper-RIGHT,
@@ -4833,29 +4834,25 @@ body:has(.classify-grid-empty) .intro-phone-frame {
 }
 
 body:has(.classify-grid-empty) .intro-phone-frame {
-  /* === PHONE SIZE knob === scale() grows the visible phone without changing its
-     layout box. 1.35 is the original size that fits the full/original screen.
-     On narrower widths (where vacant space opens up below the phone) it's bumped
-     up in the media query below. */
-  transform: translateY(-20px) scale(1.35);
-  transform-origin: center;
-}
-
-/* Narrower widths only: the phone shrinks with the game width but the vacant
-   space below it grows, so enlarge it there (full screen keeps the 1.35 above). */
-@media (max-width: 1200px) {
-  body:has(.classify-grid-empty) .intro-phone-frame {
-    transform: translateY(-15px) scale(1.48);
-  }
+  /* No scale() here on purpose (fixes BUG_FFT_07): scale() grows the visible
+     phone without changing its layout box, so the enlarged image can paint
+     straight over the button row below no matter how the button itself is
+     positioned. The .intro-phone-image rule above already sizes the phone via
+     width/height (bounded by the available row height), which can never
+     overflow — that's the only sizing mechanism this screen needs. */
+  transform: translateY(-80px);
 }
 
 body:has(.classify-grid-empty) .footer-buttons {
   /* Floated near the bottom edge of the play area (below the phone) so the
      Back/Continue button is visible and clears the phone (no overlap/touch). */
-  /* === BACK / CHECK BUTTON Y knob === more negative = lower on screen. THIS is
-     the rule for the inbox "Back" + select "Check" buttons (no fear-* class). */
+  /* === BACK / CHECK BUTTON Y knob === more positive = lower on screen. THIS is
+     the rule for the inbox "Back" + select "Check" buttons (no fear-* class).
+     Kept >= 0 so the button never rides up under the enlarged phone mockup
+     (fixes BUG_FFT_07 — button was overlapping the phone in both windowed and
+     fullscreen mode). */
   position: absolute;
-  bottom: clamp(-11px, -0.2vh, -6px);
+  bottom: clamp(10px, 5vh, 16px);
   left: 50%;
   transform: translateX(calc(-50% - 25px));
   margin: 0;
