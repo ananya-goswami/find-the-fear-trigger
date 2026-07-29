@@ -4770,7 +4770,7 @@ body:has(.classify-grid-empty) .classify-intro-panel {
    grow the phone; if the footer button ever touches it again, raise the
    reserved px instead of re-adding a scale() transform. */
 body:has(.classify-grid-empty) .intro-phone-image {
-  height: min(56vw, calc(100vh - 280px));
+  height: min(56vw, calc(100vh - 210px));
   max-height: none;
   max-width: 100%;
   width: auto;
@@ -4786,7 +4786,7 @@ body:has(.classify-grid-empty) .intro-phone-image {
    === PHONE TEXT SIZE knob === bigger factor = bigger text. */
 body:has(.classify-grid-empty) .phone-inbox,
 body:has(.classify-grid-empty) .phone-sms {
-  font-size: clamp(10px, calc(min(56vw, 100vh - 280px) * 0.0195), 16px);
+  font-size: clamp(10px, calc(min(56vw, 100vh - 210px) * 0.0195), 16px);
 }
 
 /* All intro screens: make Avi's speech a squarish box parked at the upper-RIGHT,
