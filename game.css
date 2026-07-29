@@ -1451,7 +1451,7 @@
    the bottom box), lower it if it ever touches the phone's edge. */
 .phone-sms-bubble.boxing-active {
   line-height: 1.6;
-  font-size: clamp(7px, calc(min(56vw, 100vh - 210px) * 0.026), 40px);
+  font-size: clamp(7px, calc(min(56vw, 100vh - 200px) * 0.026), 40px);
   padding: 0.6em 0.8em;
 }
 
@@ -4770,11 +4770,20 @@ body:has(.classify-grid-empty) .classify-intro-panel {
    grow the phone; if the footer button ever touches it again, raise the
    reserved px instead of re-adding a scale() transform. */
 body:has(.classify-grid-empty) .intro-phone-image {
-  height: min(56vw, calc(100vh - 210px));
+  height: min(56vw, calc(100vh - 205px));
   max-height: none;
   max-width: 100%;
   width: auto;
   flex-shrink: 0;
+}
+
+/* Screen 1 (lock-notification, before the SBI alert is tapped) has NO footer
+   button yet — #footerActions is still empty there — so the reserve above
+   (sized to clear the Back/Check button on the later screens) only wastes
+   vertical space on this screen. Let the phone use that space here, since
+   there is nothing below it to collide with. */
+body:has(.classify-grid-empty) .right-panel:not(:has(#footerActions .btn)) .intro-phone-image {
+  height: min(56vw, calc(100vh - 125px));
 }
 
 /* Tie the phone-screen overlay text to the SAME expression that sizes the phone
@@ -4786,7 +4795,7 @@ body:has(.classify-grid-empty) .intro-phone-image {
    === PHONE TEXT SIZE knob === bigger factor = bigger text. */
 body:has(.classify-grid-empty) .phone-inbox,
 body:has(.classify-grid-empty) .phone-sms {
-  font-size: clamp(10px, calc(min(56vw, 100vh - 210px) * 0.0195), 16px);
+  font-size: clamp(10px, calc(min(56vw, 100vh - 200px) * 0.0195), 16px);
 }
 
 /* All intro screens: make Avi's speech a squarish box parked at the upper-RIGHT,
