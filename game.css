@@ -4141,7 +4141,12 @@ body:has(.classify-grid) .classify-grid {
 }
 
 body:has(.classify-grid) .classify-grid.classify-grid-empty {
-  grid-template-columns: 1fr;
+  /* minmax(0, 1fr) instead of 1fr: the wide landscape phone image gives this
+     column a large min-content size, so a plain `1fr` track GREW past the grid
+     container and overflowed to the right, carrying the phone off-centre while
+     the footer button stayed centred. Capping the track at 0 lets the panel
+     overflow instead, which `justify-self: center` then centres symmetrically. */
+  grid-template-columns: minmax(0, 1fr);
   justify-content: stretch;
   align-items: center;
 }
@@ -4758,6 +4763,13 @@ body:has(.classify-grid-empty) .mobile-screen-progress {
 
 body:has(.classify-grid-empty) .classify-intro-panel {
   min-height: 0;
+  /* The phone image is a wide landscape canvas (see .intro-phone-image below), so
+     this panel is often WIDER than its grid track. As a start-aligned grid item it
+     then overflowed to the right only, dragging the visible phone right of centre
+     while the footer button stayed centred — the button looked shifted left.
+     Centring the item makes the overflow symmetric, so the phone stays centred
+     at every window width. */
+  justify-self: center;
 }
 
 /* Real, layout-respecting size (no scale() hacks — those overflowed past this
